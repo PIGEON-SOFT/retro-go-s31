@@ -200,9 +200,13 @@ ESP-IDF 风格的工程方便编译和分享。音频驱动仍在调试中，部
 
 ## 法律说明
 
-本仓库不包含商业 ROM 或受版权保护的游戏 dump。请只使用你有权使用和分发的文件。
+本工程基于 Retro-Go 移植，根目录 `LICENSE` / `COPYING` 为 GPL v2 许可证文本。
+第三方模拟器核心和库保留各自的许可证与版权声明，详见对应目录。
 
-本工程基于 Retro-Go，并遵循其许可证。见 [COPYING](COPYING)。
+本仓库不包含商业 ROM 或受版权保护的游戏 dump。请只使用你有权使用和分发的文件。
+发布固件镜像时，请同时提供源码仓库链接和许可证说明。
+
+更多声明见 [NOTICE.md](NOTICE.md)。
 
 ## Issue
 
@@ -428,10 +432,16 @@ and porting:
 
 ## Legal
 
-This repository does not include commercial ROMs or copyrighted game dumps.
-Only add files you have the right to redistribute.
+This project is a port based on Retro-Go. The root `LICENSE` / `COPYING` files
+contain the GPL v2 license text. Third-party emulator cores and libraries keep
+their own license and copyright notices in their respective directories.
 
-The project is based on Retro-Go and follows its license terms. See [COPYING](COPYING).
+This repository does not include commercial ROMs or copyrighted game dumps.
+Only add files you have the right to redistribute. When distributing firmware
+images, provide the source repository link and license notices together with the
+binary.
+
+See [NOTICE.md](NOTICE.md) for more details.
 
 ## Issues
 
