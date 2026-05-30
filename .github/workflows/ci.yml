@@ -3,33 +3,23 @@ name: ci
 on: 
   workflow_dispatch:      # Start a workflow
   push:
+  pull_request:
 
 jobs:
-  build:
+  checks:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Build
-      uses: docker/build-push-action@v6
-      with:
-        context: .
-        tags: retro-go:latest
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        load: true
-
-    - name: Extract binaries from docker image
+    - name: Repository checks
       run: |
-        docker run --rm -v $(pwd)/build:/build retro-go:latest sh -c "cp /app/*.fw /build"
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: binaries
-        path: build/*.fw
+        test -f CMakeLists.txt
+        test -f README.md
+        grep -q "ESP32-S31-Korvo-1" README.md
+        grep -q "build/retro-go-s31-full.img" README.md
+        if git ls-files | grep -Ei '(^|/)(build|roms?|romart)/|\.((nes|gba|gbc|gb|sfc|smc|gw|img|7z|rar|zip))$'; then
+          echo "Generated files, ROMs or archives should not be tracked."
+          exit 1
+        fi
