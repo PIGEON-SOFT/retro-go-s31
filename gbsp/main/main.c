@@ -26,6 +26,62 @@ gbsp_memory_t *gbsp_memory;
 static rg_surface_t *updates[2];
 static rg_surface_t *currentUpdate;
 static rg_app_t *app;
+static char *backup_file;
+static uint32_t backup_crc;
+static bool backup_loaded;
+
+static uint32_t backup_get_crc(void)
+{
+    return rg_crc32(0, gamepak_backup, sizeof(gamepak_backup));
+}
+
+static void backup_load(void)
+{
+    void *data = NULL;
+    size_t data_len = 0;
+
+    backup_file = rg_emu_get_path(RG_PATH_SAVE_SRAM, app->romPath);
+    rg_storage_mkdir(rg_dirname(backup_file));
+
+    if (rg_storage_read_file(backup_file, &data, &data_len, 0))
+    {
+        size_t copy_len = data_len < sizeof(gamepak_backup) ? data_len : sizeof(gamepak_backup);
+        memcpy(gamepak_backup, data, copy_len);
+        free(data);
+        backup_loaded = true;
+        RG_LOGI("Loaded GBA backup: %s (%u bytes)", backup_file, (unsigned)copy_len);
+    }
+
+    backup_crc = backup_get_crc();
+}
+
+static bool backup_save(bool force)
+{
+    uint32_t crc = backup_get_crc();
+
+    if (!force && crc == backup_crc)
+        return true;
+
+    if (backup_type == BACKUP_UNKN && !backup_loaded)
+        return true;
+
+    if (!backup_file)
+        return false;
+
+    if (!rg_storage_mkdir(rg_dirname(backup_file)))
+        RG_LOGW("Could not create backup directory: %s", rg_dirname(backup_file));
+
+    if (!rg_storage_write_file(backup_file, gamepak_backup, sizeof(gamepak_backup), RG_FILE_ATOMIC_WRITE))
+    {
+        RG_LOGE("Failed to save GBA backup: %s", backup_file);
+        return false;
+    }
+
+    backup_crc = crc;
+    backup_loaded = true;
+    RG_LOGI("Saved GBA backup: %s", backup_file);
+    return true;
+}
 
 void netpacket_poll_receive()
 {
@@ -42,12 +98,32 @@ static bool screenshot_handler(const char *filename, int width, int height)
 
 static bool save_state_handler(const char *filename)
 {
-    return false;
+    void *data = malloc(GBA_STATE_MEM_SIZE);
+    if (!data)
+        return false;
+
+    gba_save_state(data);
+    bool ok = rg_storage_write_file(filename, data, GBA_STATE_MEM_SIZE, RG_FILE_ATOMIC_WRITE);
+    free(data);
+    backup_save(true);
+    return ok;
 }
 
 static bool load_state_handler(const char *filename)
 {
-    return false;
+    void *data = NULL;
+    size_t data_len = 0;
+
+    if (!rg_storage_read_file(filename, &data, &data_len, 0))
+        return false;
+
+    bool ok = data_len == GBA_STATE_MEM_SIZE && gba_load_state(data);
+    free(data);
+
+    if (ok)
+        backup_crc = backup_get_crc();
+
+    return ok;
 }
 
 static bool reset_handler(bool hard)
@@ -60,6 +136,10 @@ static void event_handler(int event, void *arg)
     if (event == RG_EVENT_REDRAW)
     {
         rg_display_submit(currentUpdate, 0);
+    }
+    else if (event == RG_EVENT_SHUTDOWN)
+    {
+        backup_save(true);
     }
 }
 
@@ -130,6 +210,8 @@ void app_main(void)
         RG_PANIC("Could not load the game file.");
     }
 
+    backup_load();
+
     RG_LOGI("reset_gba");
     reset_gba();
 
@@ -138,6 +220,7 @@ void app_main(void)
     while (true)
     {
         // RG_TIMER_INIT();
+        static uint32_t backup_autosave_counter;
 
         rg_audio_sample_t mixbuffer[AUDIO_BUFFER_LENGTH];
         uint32_t joystick = rg_input_read_gamepad();
@@ -174,6 +257,12 @@ void app_main(void)
             skip_next_frame = app->frameskip;
         else if (skip_next_frame > 0)
             skip_next_frame--;
+
+        if (++backup_autosave_counter >= 120)
+        {
+            backup_autosave_counter = 0;
+            backup_save(false);
+        }
     }
 
     RG_PANIC("GBsP Ended");
