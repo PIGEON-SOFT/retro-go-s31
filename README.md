@@ -98,6 +98,21 @@ esptool.py --chip esp32s31 -p /dev/cu.usbserial-10 -b 1500000 \
 ESPBAUD=921600 idf.py flash
 ```
 
+## 发布包下载
+
+GitHub Release 提供两个常用附件：
+
+- `retro-go-s31_*.bin`：完整全量固件镜像，从地址 `0x0` 烧录。
+- `retro-go-s31-sdcard-template.zip`：SD 卡空目录模板，解压到 FAT32 SD 卡根目录。
+
+Release 里的 `.bin` 和本地构建的 `build/retro-go-s31-full.img` 是同类整包镜像，
+只是为了兼容部分社区平台要求使用 `.bin` 后缀。
+
+```sh
+esptool.py --chip esp32s31 -p /dev/cu.usbserial-10 -b 1500000 \
+  write_flash --flash_size detect 0x0 retro-go-s31_*.bin
+```
+
 ## SD 卡目录
 
 请把 SD 卡格式化为 FAT32。ROM、BIOS 和封面图放在 SD 卡里，不要提交到仓库。
@@ -328,6 +343,23 @@ If 1500000 baud is unstable on your cable, try:
 
 ```sh
 ESPBAUD=921600 idf.py flash
+```
+
+## Release Downloads
+
+GitHub Releases provide two common assets:
+
+- `retro-go-s31_*.bin`: complete full firmware image, flashed at offset `0x0`.
+- `retro-go-s31-sdcard-template.zip`: empty SD card directory template, extracted
+  to the root of a FAT32 SD card.
+
+The Release `.bin` file is the same kind of full image as the locally built
+`build/retro-go-s31-full.img`; the `.bin` suffix is provided for community
+platforms that require it.
+
+```sh
+esptool.py --chip esp32s31 -p /dev/cu.usbserial-10 -b 1500000 \
+  write_flash --flash_size detect 0x0 retro-go-s31_*.bin
 ```
 
 ## SD Card Layout
