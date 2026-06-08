@@ -32,4 +32,4 @@ BIOS files:
 Notes:
 - This template intentionally does not include ROMs, BIOS files or cover packs.
 - Saves are written under /retro-go/saves.
-- Audio on the ESP32-S31-Korvo-1 ES8389 path is still being debugged in this port.
+- ES8389 audio has been updated with wu0uw's fix; please report remaining noise, silence or BGM issues with a serial log.
