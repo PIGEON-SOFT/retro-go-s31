@@ -6,6 +6,10 @@
 #include <string.h>
 #include <math.h>
 
+#ifdef RG_GAMEPAD_BLUETOOTH //fix 2026-06-08
+#include "drivers/input/rg_input_bluetooth.h"
+#endif
+
 #if defined(RG_GAMEPAD_ADC_MAP) || (defined(RG_BATTERY_DRIVER) && RG_BATTERY_DRIVER == 1)
 #define RG_INPUT_USE_ADC 1
 #else
@@ -282,6 +286,10 @@ bool rg_input_read_gamepad_raw(uint32_t *out)
     state |= touch_read_gamepad();
 #endif
 
+#ifdef RG_GAMEPAD_BLUETOOTH //fix 2026-06-08
+    state |= rg_input_bluetooth_read();
+#endif
+
 #if defined(RG_GAMEPAD_VIRT_MAP)
     for (size_t i = 0; i < RG_COUNT(keymap_virt); ++i)
     {
@@ -425,6 +433,14 @@ void rg_input_init(void)
                       RG_KEY_A | RG_KEY_B | RG_KEY_L | RG_KEY_R;
 #endif
 
+#ifdef RG_GAMEPAD_BLUETOOTH //fix 2026-06-08
+    RG_LOGI("Initializing BT gamepad driver...");
+    rg_input_bluetooth_init(RG_BT_TRANSPORT_CLASSIC);
+    gamepad_mapped |= RG_KEY_UP | RG_KEY_RIGHT | RG_KEY_DOWN | RG_KEY_LEFT |
+                      RG_KEY_SELECT | RG_KEY_START | RG_KEY_MENU | RG_KEY_OPTION |
+                      RG_KEY_A | RG_KEY_B | RG_KEY_X | RG_KEY_Y | RG_KEY_L | RG_KEY_R;
+#endif
+
 #if defined(RG_BATTERY_DRIVER) && RG_BATTERY_DRIVER == 1 /* ADC */
     RG_LOGI("Initializing ADC battery driver...");
     if (RG_BATTERY_ADC_UNIT == ADC_UNIT_1)
@@ -457,8 +473,9 @@ void rg_input_init(void)
 void rg_input_deinit(void)
 {
     input_task_running = false;
-    // while (gamepad_state != -1)
-    //     rg_task_yield();
+#ifdef RG_GAMEPAD_BLUETOOTH //fix 2026-06-08
+    rg_input_bluetooth_deinit();
+#endif
     RG_LOGI("Input terminated.\n");
 }
 

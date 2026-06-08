@@ -134,7 +134,10 @@ static void audio_task(void *arg)
 
         if (out_count)
         {
-            esp_codec_dev_write(state.codec, out, out_count * sizeof(rg_audio_frame_t));
+            int ret = esp_codec_dev_write(state.codec, out, out_count * sizeof(rg_audio_frame_t)); //fix 2026-06-08 log write errors
+            if (ret != 0 && state.write_count < 10) {
+                RG_LOGW("ES8389 esp_codec_dev_write returned %d\n", ret);
+            }
             state.write_count++;
         }
 
@@ -168,30 +171,32 @@ static bool driver_init(int device, int sample_rate)
     if (err != ESP_OK)
         return set_error(esp_err_to_name(err));
 
+    // Match Board Manager YAML configuration for ESP32-S31-Korvo-1 //fix 2026-06-08
+    // Key: mclk=-1 (no MCLK), slot_bit_width=AUTO, ws_width=16
     i2s_std_config_t std_cfg = {
         .clk_cfg = {
-            .sample_rate_hz = sample_rate,
+            .sample_rate_hz = ES8389_CODEC_RATE,  // 48000 Hz //fix 2026-06-08 was sample_rate
             .clk_src = I2S_CLK_SRC_DEFAULT,
             .mclk_multiple = I2S_MCLK_MULTIPLE_256,
             .bclk_div = 8,
         },
         .slot_cfg = {
             .data_bit_width = I2S_DATA_BIT_WIDTH_16BIT,
-            .slot_bit_width = I2S_SLOT_BIT_WIDTH_32BIT,
+            .slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT, //fix 2026-06-08 was 32BIT
             .slot_mode = I2S_SLOT_MODE_STEREO,
             .slot_mask = I2S_STD_SLOT_BOTH,
-            .ws_width = 32,
+            .ws_width = 16, //fix 2026-06-08 was 32
             .ws_pol = false,
-            .bit_shift = true,
+            .bit_shift = false, //fix 2026-06-08 was true
             .left_align = false,
             .big_endian = false,
             .bit_order_lsb = false,
         },
         .gpio_cfg = {
-            .mclk = RG_GPIO_SND_I2S_MCLK,
-            .bclk = RG_GPIO_SND_I2S_BCK,
-            .ws = RG_GPIO_SND_I2S_WS,
-            .dout = RG_GPIO_SND_I2S_DATA,
+            .mclk = GPIO_NUM_NC,  // Board Manager: mclk=-1 (no MCLK) //fix 2026-06-08 was RG_GPIO_SND_I2S_MCLK
+            .bclk = RG_GPIO_SND_I2S_BCK,   // GPIO 3
+            .ws = RG_GPIO_SND_I2S_WS,      // GPIO 4
+            .dout = RG_GPIO_SND_I2S_DATA,  // GPIO 5
             .din = GPIO_NUM_NC,
         },
     };
@@ -208,6 +213,7 @@ static bool driver_init(int device, int sample_rate)
     if (!state.ctrl_if)
         return set_error("audio_codec_new_i2c_ctrl failed");
 
+    // Match Board Manager YAML: mclk_enabled=false, pa active_level=1 //fix 2026-06-08
     es8389_codec_cfg_t codec_cfg = {
         .ctrl_if = state.ctrl_if,
         .gpio_if = audio_codec_new_gpio(),
@@ -215,7 +221,7 @@ static bool driver_init(int device, int sample_rate)
         .pa_pin = RG_GPIO_SND_AMP_ENABLE,
         .pa_reverted = false,
         .master_mode = false,
-        .use_mclk = true,
+        .use_mclk = false,  // Board Manager: mclk_enabled=false //fix 2026-06-08 was true
         .mclk_div = 256,
     };
     state.codec_if = es8389_codec_new(&codec_cfg);
@@ -328,11 +334,11 @@ static bool driver_submit(const rg_audio_frame_t *frames, size_t count)
         }
     }
 
-    if (state.submit_count <= 3 || (state.submit_count % 240) == 0)
+    if (state.submit_count <= 3 || (state.submit_count % 60) == 0) //fix 2026-06-08 was % 240
     {
-        RG_LOGI("ES8389 audio submit=%u in_frames=%u source_rate=%u muted=%d peak=%d first=%d/%d\n",
+        RG_LOGI("ES8389 audio submit=%u in_frames=%u source_rate=%u muted=%d peak=%d first=%d/%d write=%u\n",
             (unsigned)state.submit_count, (unsigned)count, (unsigned)state.sample_rate,
-            state.muted, peak, frames[0].left, frames[0].right);
+            state.muted, peak, frames[0].left, frames[0].right, (unsigned)state.write_count);
     }
 
     return true;

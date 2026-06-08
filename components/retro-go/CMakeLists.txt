@@ -1,7 +1,7 @@
-set(COMPONENT_SRCDIRS ". drivers/audio fonts libs/netplay libs/lodepng libs/cJSON")
+set(COMPONENT_SRCDIRS ". drivers/audio drivers/input fonts libs/netplay libs/lodepng libs/cJSON") #fix 2026-06-08 added drivers/input for bluetooth
 set(COMPONENT_ADD_INCLUDEDIRS ". libs/netplay libs/lodepng libs/cJSON")
 if((IDF_VERSION_MAJOR GREATER 5) OR ((IDF_VERSION_MAJOR EQUAL 5) AND (IDF_VERSION_MINOR GREATER 2))) # esp-idf 5.3+
-    set(COMPONENT_REQUIRES "spi_flash fatfs app_update nvs_flash esp_adc esp_timer esp_psram esp_wifi esp_http_client esp_ringbuf esp_driver_ledc esp_driver_gpio esp_driver_i2c esp_driver_i2s esp_lcd driver espressif__esp_codec_dev")
+    set(COMPONENT_REQUIRES "spi_flash fatfs app_update nvs_flash esp_adc esp_timer esp_psram esp_wifi esp_http_client esp_ringbuf esp_driver_ledc esp_driver_gpio esp_driver_i2c esp_driver_i2s esp_lcd driver espressif__esp_codec_dev bt esp_hid esp_coex") #fix 2026-06-08 added bt esp_hid esp_coex for bluetooth
 elseif(IDF_VERSION_MAJOR EQUAL 5) # esp-idf 5.0 - 5.2
     set(COMPONENT_REQUIRES "spi_flash fatfs app_update nvs_flash esp_adc esp_timer esp_psram esp_wifi esp_http_client esp_lcd")
 else() # esp-idf 4.1 - 4.4

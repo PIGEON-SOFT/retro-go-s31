@@ -1,6 +1,10 @@
 #include "rg_system.h"
 #include "rg_gui.h"
 
+#ifdef RG_GAMEPAD_BLUETOOTH //fix 2026-06-08
+#include "drivers/input/rg_input_bluetooth.h"
+#endif
+
 #include <cJSON.h>
 #include <math.h>
 #include <stdlib.h>
@@ -2097,6 +2101,141 @@ static rg_gui_event_t wifi_cb(rg_gui_option_t *option, rg_gui_event_t event)
 }
 #endif
 
+#ifdef RG_GAMEPAD_BLUETOOTH //fix 2026-06-08 bluetooth menu UI
+#define BT_SCAN_MAX 20
+
+static rg_gui_event_t bluetooth_enable_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    if (event == RG_DIALOG_PREV || event == RG_DIALOG_NEXT || event == RG_DIALOG_ENTER)
+    {
+        bool enabled = rg_input_bluetooth_is_connected();
+        if (!enabled)
+            rg_input_bluetooth_init(RG_BT_TRANSPORT_CLASSIC);
+        else
+            rg_input_bluetooth_disconnect();
+    }
+    strcpy(option->value, rg_input_bluetooth_is_connected() ? _("Connected") : _("Disconnected"));
+    return RG_DIALOG_VOID;
+}
+
+static void bt_scan_cb(const rg_bt_device_info_t *dev, void *ud)
+{
+    rg_bt_device_info_t *results = (rg_bt_device_info_t *)ud;
+    int *count = (int *)((char *)results + BT_SCAN_MAX * sizeof(rg_bt_device_info_t));
+    if (*count < BT_SCAN_MAX && dev->name[0])
+        results[(*count)++] = *dev;
+}
+
+static rg_gui_event_t bluetooth_scan_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    if (event == RG_DIALOG_ENTER)
+    {
+        /* Allocate results array + count */
+        size_t buf_size = BT_SCAN_MAX * sizeof(rg_bt_device_info_t) + sizeof(int);
+        rg_bt_device_info_t *results = malloc(buf_size);
+        if (!results) return RG_DIALOG_VOID;
+        memset(results, 0, buf_size);
+        int *count = (int *)((char *)results + BT_SCAN_MAX * sizeof(rg_bt_device_info_t));
+        *count = 0;
+
+        rg_input_bluetooth_init(RG_BT_TRANSPORT_CLASSIC);
+        rg_input_bluetooth_scan(8, bt_scan_cb, results);
+
+        if (*count == 0)
+        {
+            rg_gui_alert("Bluetooth", "No controllers found.\n\nMake sure your\ndevice is in pairing mode.");
+        }
+        else
+        {
+            /* Build dialog options from results */
+            rg_gui_option_t *opts = malloc((*count + 1) * sizeof(rg_gui_option_t));
+            if (opts)
+            {
+                for (int i = 0; i < *count; i++)
+                {
+                    char *label = malloc(96);
+                    if (label)
+                        snprintf(label, 96, "%s\n%02x:%02x:%02x:%02x:%02x:%02x",
+                                 results[i].name,
+                                 results[i].bda[0], results[i].bda[1], results[i].bda[2],
+                                 results[i].bda[3], results[i].bda[4], results[i].bda[5]);
+                    opts[i] = (rg_gui_option_t){(intptr_t)&results[i], label, NULL, RG_DIALOG_FLAG_NORMAL, NULL};
+                }
+                opts[*count] = (rg_gui_option_t)RG_DIALOG_END;
+
+                int sel = rg_gui_dialog("Select Device", opts, 0);
+                if (sel > 0)
+                {
+                    const rg_bt_device_info_t *dev = (const rg_bt_device_info_t *)sel;
+                    char msg[96];
+                    snprintf(msg, sizeof(msg), "Connecting to\n%.60s...", dev->name);
+                    rg_gui_alert("Bluetooth", msg);
+                    if (rg_input_bluetooth_connect(dev->bda, RG_BT_TRANSPORT_CLASSIC))
+                    {
+                        rg_input_bluetooth_save_device(dev);
+                        rg_gui_alert("Bluetooth", "Connected!");
+                    }
+                    else
+                    {
+                        rg_gui_alert("Bluetooth", "Connection failed");
+                    }
+                }
+                for (int i = 0; i < *count; i++)
+                    free((void *)opts[i].label);
+                free(opts);
+            }
+        }
+        free(results);
+        return RG_DIALOG_REDRAW;
+    }
+    return RG_DIALOG_VOID;
+}
+
+static rg_gui_event_t bluetooth_forget_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    if (event == RG_DIALOG_ENTER)
+    {
+        if (rg_gui_confirm("Bluetooth", "Forget saved device?", false))
+        {
+            rg_input_bluetooth_clear_saved_device();
+            rg_gui_alert("Bluetooth", "Saved device cleared");
+        }
+        return RG_DIALOG_REDRAW;
+    }
+    return RG_DIALOG_VOID;
+}
+
+static rg_gui_event_t bluetooth_status_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    if (event == RG_DIALOG_UPDATE)
+    {
+        rg_bt_device_info_t info;
+        if (rg_input_bluetooth_get_connected_device(&info))
+            snprintf(option->value, 32, "%.20s", info.name);
+        else
+            strcpy(option->value, _("None"));
+    }
+    return RG_DIALOG_VOID;
+}
+
+static rg_gui_event_t bluetooth_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    if (event == RG_DIALOG_ENTER)
+    {
+        const rg_gui_option_t options[] = {
+            {0x00, _("BLE enable"),       "-",  RG_DIALOG_FLAG_NORMAL, &bluetooth_enable_cb},
+            {0x00, _("Scan devices"),     NULL, RG_DIALOG_FLAG_NORMAL, &bluetooth_scan_cb},
+            {0x00, _("Forget device"),    NULL, RG_DIALOG_FLAG_NORMAL, &bluetooth_forget_cb},
+            RG_DIALOG_SEPARATOR,
+            {0x00, _("Connected"),        "-",  RG_DIALOG_FLAG_MESSAGE, &bluetooth_status_cb},
+            RG_DIALOG_END,
+        };
+        rg_gui_dialog(option->label, options, 0);
+    }
+    return RG_DIALOG_VOID;
+}
+#endif
+
 static rg_gui_event_t app_options_cb(rg_gui_option_t *option, rg_gui_event_t event)
 {
     if (event == RG_DIALOG_ENTER)
@@ -2136,6 +2275,9 @@ void rg_gui_options_menu(void)
         #endif
         #ifdef RG_ENABLE_NETWORKING
         {0, _("Wi-Fi options"), NULL, RG_DIALOG_FLAG_NORMAL, &wifi_cb},
+        #endif
+        #ifdef RG_GAMEPAD_BLUETOOTH //fix 2026-06-08
+        {0, _("Bluetooth"),     NULL, RG_DIALOG_FLAG_NORMAL, &bluetooth_cb},
         #endif
         {0, _("Launcher options"), NULL, RG_DIALOG_FLAG_NORMAL, &app_options_cb},
         RG_DIALOG_END,
